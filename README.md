@@ -24,11 +24,11 @@ mvn spring-boot:run
 
 Backend will start on [http://localhost:8080](http://localhost:8080)
 
-Health check:
+### API
 
-```bash
-curl http://localhost:8080/api/health
-```
+- GET /api/health
+- GET /api/state
+- GET /api/state/stream (SSE)
 
 ## Run frontend
 

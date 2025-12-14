@@ -78,7 +78,8 @@ class GameStateService {
             val decayPerMinute = 0.01
             for (i in presences.indices) {
                 val p = presences[i]
-                val newPresence = (p.presence - decayPerMinute * minutes).coerceAtLeast(0.0)
+                val raw = (p.presence - decayPerMinute * minutes).coerceAtLeast(0.0)
+                val newPresence = kotlin.math.round(raw * 100) / 100
                 presences[i] = p.copy(presence = newPresence)
             }
 
