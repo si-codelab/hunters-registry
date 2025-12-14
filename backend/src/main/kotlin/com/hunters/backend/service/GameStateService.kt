@@ -1,5 +1,6 @@
 package com.hunters.backend.service
 
+import com.hunters.backend.api.GameTimeResponse
 import com.hunters.backend.domain.*
 import jakarta.annotation.PostConstruct
 import org.springframework.stereotype.Service
@@ -8,6 +9,8 @@ import java.util.UUID
 @Service
 class GameStateService {
 
+    private val lock = Any()
+    private var gameMinute: Long = 0
     private val hunters = mutableListOf<Hunter>()
     private val monsters = mutableListOf<Monster>()
     private val presences = mutableListOf<MonsterPresence>()
@@ -63,5 +66,28 @@ class GameStateService {
             monsterId = "monster-1",
             status = MissionStatus.IN_PROGRESS
         )
+    }
+
+    fun getTime(): GameTimeResponse = synchronized(lock) {
+        val day = (gameMinute / 1440) + 1
+        val hour = ((gameMinute % 1440) / 60).toInt()
+        GameTimeResponse(minute = gameMinute, day = day, hour = hour)
+    }
+
+    fun tick(minutes: Long = 1) = synchronized(lock) {
+        gameMinute += minutes
+
+        val decayPerMinute = 0.01
+        for (i in presences.indices) {
+            val p = presences[i]
+            val newPresence = (p.presence - decayPerMinute * minutes).coerceAtLeast(0.0)
+            presences[i] = p.copy(presence = newPresence)
+        }
+
+        val expiredIds = presences.filter { it.presence <= 0.0 }.map { it.monsterId }.toSet()
+        if (expiredIds.isNotEmpty()) {
+            presences.removeIf { it.monsterId in expiredIds }
+            monsters.removeIf { it.id in expiredIds }
+        }
     }
 }

@@ -14,6 +14,7 @@ class GameStateController(
     @GetMapping("/state")
     fun getState(): GameStateResponse =
         GameStateResponse(
+            time = gameStateService.getTime(),
             hunters = gameStateService.getHunters(),
             monsters = gameStateService.getMonsters(),
             presences = gameStateService.getPresences(),
