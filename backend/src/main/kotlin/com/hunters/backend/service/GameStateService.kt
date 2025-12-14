@@ -151,8 +151,9 @@ class GameStateService {
         for (emitter in currentEmitters) {
             try {
                 emitter.send(SseEmitter.event().name("state").data(state))
-            } catch (ex: IOException) {
+            } catch (ex: Exception) {
                 dead += emitter
+                try { emitter.complete() } catch (_: Exception) {}
             }
         }
 
