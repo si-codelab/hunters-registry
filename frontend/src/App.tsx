@@ -27,6 +27,7 @@ type Mission = {
 }
 
 type GameTime = {
+  version: number,
   minute: number
   day: number
   hour: number
@@ -134,17 +135,31 @@ export default function App() {
       <header style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0 }}>Hunters Registry</h1>
-          <div style={{ color: "#4b5563", marginTop: 4 }}>
+          <div className="mt-1 text-gray-600">
             {gameState ? (
-              <>
-                Day <strong>{gameState.time.day}</strong>, hour{" "}
-                <strong>{gameState.time.hour}</strong> (minute{" "}
-                <strong>{gameState.time.minute}</strong>)
-              </>
+              <div
+                style={{
+                  color: "#4b5563",
+                  marginTop: 6,
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 12,
+                }}
+              >
+                <span style={{ fontSize: 12, letterSpacing: "0.02em", textTransform: "uppercase" }}>
+                  Day <strong>{gameState.time.day}</strong>
+                </span>
+
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 600 }}>
+                  {String(gameState.time.hour).padStart(2, "0")}:
+                  {String(gameState.time.minute).padStart(2, "0")}
+                </span>
+              </div>
             ) : (
               <>Waiting for state…</>
             )}
           </div>
+
         </div>
 
         <div style={{ alignSelf: "center" }}>

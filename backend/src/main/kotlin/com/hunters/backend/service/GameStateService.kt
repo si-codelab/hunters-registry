@@ -66,9 +66,11 @@ class GameStateService {
     }
 
     fun getTime(): GameTimeResponse = synchronized(lock) {
+
         val day = (gameMinute / 1440) + 1
         val hour = ((gameMinute % 1440) / 60).toInt()
-        GameTimeResponse(minute = gameMinute, day = day, hour = hour)
+        val minutes = (gameMinute % 60).toInt()
+        GameTimeResponse(version = gameMinute, day = day, hour = hour, minute = minutes)
     }
 
     fun tick(minutes: Long = 1) {
@@ -119,7 +121,10 @@ class GameStateService {
     fun snapshot(): GameStateResponse = synchronized(lock) {
         GameStateResponse(
             time = GameTimeResponse(
-                minute = gameMinute, day = (gameMinute / 1440) + 1, hour = ((gameMinute % 1440) / 60).toInt()
+                version = gameMinute,
+                day = (gameMinute / 1440) + 1,
+                hour = ((gameMinute % 1440) / 60).toInt(),
+                minute = (gameMinute % 60).toInt()
             ),
             hunters = hunters.toList(),
             monsters = monsters.toList(),
@@ -135,9 +140,10 @@ class GameStateService {
         synchronized(lock) {
             state = GameStateResponse(
                 time = GameTimeResponse(
-                    minute = gameMinute,
+                    version = gameMinute,
                     day = (gameMinute / 1440) + 1,
-                    hour = ((gameMinute % 1440) / 60).toInt()
+                    hour = ((gameMinute % 1440) / 60).toInt(),
+                    minute = ((gameMinute % 60)).toInt()
                 ),
                 hunters = hunters.toList(),
                 monsters = monsters.toList(),
