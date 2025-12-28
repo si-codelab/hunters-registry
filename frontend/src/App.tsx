@@ -1,82 +1,10 @@
-import { useEffect, useMemo, useState } from "react"
-
-type Hunter = {
-  id: string
-  name: string
-  skill: number
-  status: string
-}
-
-type Monster = {
-  id: string
-  type: string
-  threat: number
-}
-
-type MonsterPresence = {
-  monsterId: string
-  presence: number
-}
-
-type Mission = {
-  id: string
-  type: string
-  hunterId: string
-  monsterId: string
-  status: string
-}
-
-type GameTime = {
-  version: number,
-  minute: number
-  day: number
-  hour: number
-}
-
-type GameState = {
-  time: GameTime
-  hunters: Hunter[]
-  monsters: Monster[]
-  presences: MonsterPresence[]
-  missions: Mission[]
-}
-
-function clamp01(n: number) {
-  return Math.max(0, Math.min(1, n))
-}
-
-function percent(n: number) {
-  return Math.round(clamp01(n) * 100)
-}
+import { useMemo } from "react"
+import { useGameStateStream } from "./hooks/useGameState"
+import { percent, formatClock } from "./lib/format"
+import type { GameState } from "./types/game"
 
 export default function App() {
-  const [gameState, setGameState] = useState<GameState | null>(null)
-  const [connectionStatus, setConnectionStatus] = useState<
-    "connecting" | "connected" | "reconnecting"
-  >("connecting")
-
-  useEffect(() => {
-    const source = new EventSource("/api/state/stream")
-
-    source.onopen = () => setConnectionStatus("connected")
-    source.onerror = () => setConnectionStatus("reconnecting")
-
-    const onState = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data) as GameState
-        setGameState(data)
-      } catch (e) {
-        console.error("Failed to parse SSE state event", e, event.data)
-      }
-    }
-
-    source.addEventListener("state", onState as EventListener)
-
-    return () => {
-      source.removeEventListener("state", onState as EventListener)
-      source.close()
-    }
-  }, [])
+  const { gameState, connectionStatus } = useGameStateStream()
 
   const presenceByMonsterId = useMemo(() => {
     const map = new Map<string, number>()
@@ -132,34 +60,53 @@ export default function App() {
 
   return (
     <div style={containerStyle}>
-      <header style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <div>
           <h1 style={{ margin: 0 }}>Hunters Registry</h1>
-          <div className="mt-1 text-gray-600">
+
+          <div style={{ marginTop: 6, color: "#4b5563" }}>
             {gameState ? (
               <div
                 style={{
-                  color: "#4b5563",
-                  marginTop: 6,
                   display: "flex",
                   alignItems: "baseline",
                   gap: 12,
                 }}
               >
-                <span style={{ fontSize: 12, letterSpacing: "0.02em", textTransform: "uppercase" }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    letterSpacing: "0.02em",
+                    textTransform: "uppercase",
+                  }}
+                >
                   Day <strong>{gameState.time.day}</strong>
                 </span>
 
-                <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 600 }}>
-                  {String(gameState.time.hour).padStart(2, "0")}:
-                  {String(gameState.time.minute).padStart(2, "0")}
+                <span
+                  style={{
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, Menlo, monospace",
+                    fontWeight: 600,
+                  }}
+                >
+                  {formatClock(
+                    gameState.time.hour,
+                    gameState.time.minute
+                  )}
                 </span>
               </div>
             ) : (
               <>Waiting for state…</>
             )}
           </div>
-
         </div>
 
         <div style={{ alignSelf: "center" }}>
@@ -187,7 +134,9 @@ export default function App() {
                   <td style={tdStyle}>{h.name}</td>
                   <td style={tdStyle}>{h.skill}</td>
                   <td style={tdStyle}>
-                    <span style={badgeStyle(h.status)}>{h.status}</span>
+                    <span style={badgeStyle(h.status)}>
+                      {h.status}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -220,7 +169,13 @@ export default function App() {
                     <td style={tdStyle}>{m.type}</td>
                     <td style={tdStyle}>{m.threat}</td>
                     <td style={tdStyle}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
                         <div
                           style={{
                             height: 10,
@@ -240,7 +195,12 @@ export default function App() {
                             }}
                           />
                         </div>
-                        <span style={{ fontVariantNumeric: "tabular-nums", width: 44 }}>
+                        <span
+                          style={{
+                            fontVariantNumeric: "tabular-nums",
+                            width: 44,
+                          }}
+                        >
                           {pct}%
                         </span>
                       </div>
@@ -275,7 +235,9 @@ export default function App() {
                   <td style={tdStyle}>{ms.hunterId}</td>
                   <td style={tdStyle}>{ms.monsterId}</td>
                   <td style={tdStyle}>
-                    <span style={badgeStyle(ms.status)}>{ms.status}</span>
+                    <span style={badgeStyle(ms.status)}>
+                      {ms.status}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -286,8 +248,13 @@ export default function App() {
         )}
       </section>
 
-      <footer style={{ marginTop: "1rem", color: "#6b7280", fontSize: 12 }}>
-        Tip: refresh the page to see SSE reconnect. Presence will decay as time advances.
+      <footer
+        style={{
+          marginTop: "1rem",
+          color: "#6b7280",
+          fontSize: 12,
+        }}
+      >
       </footer>
     </div>
   )
