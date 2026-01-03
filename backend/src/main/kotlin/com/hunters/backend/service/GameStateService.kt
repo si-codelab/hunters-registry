@@ -67,6 +67,13 @@ class GameStateService {
                     setHunterIdle(m.hunterId)
                 }
             }
+            if (m.type == MissionType.OBSERVE || m.type == MissionType.CAPTURE) {
+                val elapsed = gameMinute - m.startedAtMinute
+                if (elapsed >= 5) {
+                    missions[i] = m.copy(status = MissionStatus.COMPLETED)
+                    setHunterIdle(m.hunterId)
+                }
+            }
         }
     }
 
