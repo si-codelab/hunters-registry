@@ -7,6 +7,18 @@ function cellKey(cell: Cell) {
   return `${cell.x},${cell.y}`
 }
 
+async function startScout(hunterId: string, cell: { x: number; y: number }) {
+  await fetch("/api/commands/missions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "SCOUT",
+      hunterId,
+      targetCell: cell,
+    }),
+  })
+}
+
 export default function App() {
   const { gameState, connectionStatus } = useGameStateStream()
 
@@ -90,12 +102,12 @@ export default function App() {
 
   const gridStyle: React.CSSProperties = gameState
     ? {
-        display: "grid",
-        gridTemplateColumns: `repeat(${gameState.map.width}, ${cellSize}px)`,
-        gridTemplateRows: `repeat(${gameState.map.height}, ${cellSize}px)`,
-        gap: 8,
-        marginTop: 10,
-      }
+      display: "grid",
+      gridTemplateColumns: `repeat(${gameState.map.width}, ${cellSize}px)`,
+      gridTemplateRows: `repeat(${gameState.map.height}, ${cellSize}px)`,
+      gap: 8,
+      marginTop: 10,
+    }
     : {}
 
   const gridCellBase: React.CSSProperties = {
@@ -284,6 +296,7 @@ export default function App() {
                 <th style={thStyle}>Skill</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Cell</th>
+                <th style={thStyle}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -297,6 +310,26 @@ export default function App() {
                   <td style={tdStyle}>
                     {h.cell.x},{h.cell.y}
                   </td>
+                  <td style={tdStyle}>
+                    {h.status === "IDLE" ? (
+                      <button
+                        onClick={() => startScout(h.id, h.cell)}
+                        style={{
+                          fontSize: 12,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: "1px solid #e5e7eb",
+                          background: "#f9fafb",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Scout
+                      </button>
+                    ) : (
+                      <span style={{ color: "#9ca3af", fontSize: 12 }}>Busy</span>
+                    )}
+                  </td>
+
                 </tr>
               ))}
             </tbody>

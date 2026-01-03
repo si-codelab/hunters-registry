@@ -2,6 +2,7 @@ package com.hunters.backend.service
 
 import com.hunters.backend.api.GameStateResponse
 import com.hunters.backend.api.GameTimeResponse
+import com.hunters.backend.api.StartMissionRequest
 import com.hunters.backend.domain.*
 import jakarta.annotation.PostConstruct
 import org.springframework.stereotype.Service
@@ -31,7 +32,6 @@ class GameStateService {
     fun init() {
         seedHunters()
         seedMonsters()
-        seedMissions()
     }
 
     fun getHunters(): List<Hunter> = withLock { hunters.toList() }
@@ -64,10 +64,19 @@ class GameStateService {
                 val elapsed = gameMinute - m.startedAtMinute
                 if (elapsed >= SCOUT_DURATION_MINUTES) {
                     missions[i] = m.copy(status = MissionStatus.COMPLETED)
+                    setHunterIdle(m.hunterId)
                 }
             }
         }
     }
+
+    private fun setHunterIdle(hunterId: String) {
+        val idx = hunters.indexOfFirst { it.id == hunterId }
+        if (idx == -1) return
+        val h = hunters[idx]
+        hunters[idx] = h.copy(status = HunterStatus.IDLE)
+    }
+
 
     private fun isWithinScoutRadius(hunterCell: Cell, presenceCell: Cell): Boolean {
         val dx = kotlin.math.abs(hunterCell.x - presenceCell.x)
@@ -240,4 +249,76 @@ class GameStateService {
             startedAtMinute = gameMinute
         )
     }
+
+    fun startMission(req: StartMissionRequest): Mission {
+        val (created, stateToBroadcast) = withLock {
+            val hunterIndex = hunters.indexOfFirst { it.id == req.hunterId }
+            if (hunterIndex == -1) throw IllegalArgumentException("Hunter not found: ${req.hunterId}")
+
+            val hunter = hunters[hunterIndex]
+            if (hunter.status != HunterStatus.IDLE) {
+                throw IllegalStateException("Hunter is not idle: ${req.hunterId}")
+            }
+
+            when (req.type) {
+                MissionType.SCOUT -> {
+                    val cell = req.targetCell ?: throw IllegalArgumentException("SCOUT requires targetCell")
+                    requireCellInBounds(cell)
+
+                    // For now: move the hunter instantly to the target cell
+                    hunters[hunterIndex] = hunter.copy(
+                        status = HunterStatus.ON_MISSION,
+                        cell = cell
+                    )
+                }
+
+                MissionType.OBSERVE, MissionType.CAPTURE -> {
+                    val monsterId = req.monsterId ?: throw IllegalArgumentException("${req.type} requires monsterId")
+                    requireMonsterExists(monsterId)
+
+                    // Require it to currently be revealed
+                    if (!isMonsterRevealed(monsterId)) {
+                        throw IllegalStateException("Monster is not revealed: $monsterId")
+                    }
+
+                    hunters[hunterIndex] = hunter.copy(status = HunterStatus.ON_MISSION)
+                }
+            }
+
+            val mission = Mission(
+                id = UUID.randomUUID().toString(),
+                type = req.type,
+                hunterId = req.hunterId,
+                monsterId = req.monsterId ?: "",
+                status = MissionStatus.IN_PROGRESS,
+                startedAtMinute = gameMinute
+            )
+
+            missions += mission
+
+            mission to buildStateResponse()
+        }
+
+        broadcastState(stateToBroadcast)
+        return created
+    }
+
+
+    private fun requireCellInBounds(cell: Cell) {
+        if (cell.x !in 0 until map.width || cell.y !in 0 until map.height) {
+            throw IllegalArgumentException("Cell out of bounds: ${cell.x},${cell.y}")
+        }
+    }
+
+    private fun requireMonsterExists(monsterId: String) {
+        if (monsters.none { it.id == monsterId }) {
+            throw IllegalArgumentException("Monster not found: $monsterId")
+        }
+    }
+
+    private fun isMonsterRevealed(monsterId: String): Boolean {
+        // presence is the real "instance" that is revealed
+        return visiblePresences().any { it.monsterId == monsterId }
+    }
+
 }
