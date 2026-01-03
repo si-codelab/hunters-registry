@@ -14,6 +14,9 @@ import kotlin.math.round
 @Service
 class GameStateService {
 
+    private val SCOUT_DURATION_MINUTES = 60L
+    private val SCOUT_RADIUS = 1
+
     private val emitters = mutableSetOf<SseEmitter>()
     private val lock = Any()
 
@@ -45,11 +48,49 @@ class GameStateService {
             advanceTime(minutes)
             decayPresences(minutes)
             removeExpiredMonsters()
+            updateMissions()
             buildStateResponse()
         }
 
         broadcastState(stateToBroadcast)
     }
+
+    private fun updateMissions() {
+        for (i in missions.indices) {
+            val m = missions[i]
+            if (m.status != MissionStatus.IN_PROGRESS) continue
+
+            if (m.type == MissionType.SCOUT) {
+                val elapsed = gameMinute - m.startedAtMinute
+                if (elapsed >= SCOUT_DURATION_MINUTES) {
+                    missions[i] = m.copy(status = MissionStatus.COMPLETED)
+                }
+            }
+        }
+    }
+
+    private fun isWithinScoutRadius(hunterCell: Cell, presenceCell: Cell): Boolean {
+        val dx = kotlin.math.abs(hunterCell.x - presenceCell.x)
+        val dy = kotlin.math.abs(hunterCell.y - presenceCell.y)
+        return dx <= SCOUT_RADIUS && dy <= SCOUT_RADIUS
+    }
+
+    private fun visiblePresences(): List<MonsterPresence> {
+        val huntersById = hunters.associateBy { it.id }
+
+        val scoutHunters = missions
+            .asSequence()
+            .filter { it.status == MissionStatus.IN_PROGRESS && it.type == MissionType.SCOUT }
+            .mapNotNull { huntersById[it.hunterId] }
+            .toList()
+
+        if (scoutHunters.isEmpty()) return emptyList()
+
+        return presences.filter { presence ->
+            scoutHunters.any { hunter -> isWithinScoutRadius(hunter.cell, presence.cell) }
+        }
+    }
+
 
     fun registerStateStream(): SseEmitter {
         val emitter = SseEmitter(Duration.ofMinutes(30).toMillis())
@@ -127,12 +168,14 @@ class GameStateService {
     }
 
     private fun buildStateResponse(): GameStateResponse {
+        val visible = visiblePresences()
+
         return GameStateResponse(
             time = buildTimeResponse(),
             map = map,
             hunters = hunters.toList(),
             monsters = monsters.toList(),
-            presences = presences.toList(),
+            presences = visible,
             missions = missions.toList()
         )
     }
@@ -183,17 +226,18 @@ class GameStateService {
         presences += MonsterPresence(
             monsterId = monster.id,
             presence = 0.8,
-            cell = Cell(x = 2, y = 4)
+            cell = Cell(x = 2, y = 2)
         )
     }
 
     private fun seedMissions() {
         missions += Mission(
             id = UUID.randomUUID().toString(),
-            type = MissionType.OBSERVE,
+            type = MissionType.SCOUT,
             hunterId = "hunter-1",
-            monsterId = "monster-1",
-            status = MissionStatus.IN_PROGRESS
+            monsterId = "monster-1", // unused for SCOUT right now, but keep it for now
+            status = MissionStatus.IN_PROGRESS,
+            startedAtMinute = gameMinute
         )
     }
 }

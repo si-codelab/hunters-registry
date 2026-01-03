@@ -5,5 +5,6 @@ data class Mission(
     val type: MissionType,
     val hunterId: String,
     val monsterId: String,
-    val status: MissionStatus
+    val status: MissionStatus,
+    val startedAtMinute: Long
 )
