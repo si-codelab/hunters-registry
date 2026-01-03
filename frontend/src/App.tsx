@@ -1,7 +1,11 @@
 import { useMemo } from "react"
 import { useGameStateStream } from "./hooks/useGameState"
 import { percent, formatClock } from "./lib/format"
-import type { GameState } from "./types/game"
+import type { Cell, GameState } from "./types/game"
+
+function cellKey(cell: Cell) {
+  return `${cell.x},${cell.y}`
+}
 
 export default function App() {
   const { gameState, connectionStatus } = useGameStateStream()
@@ -13,10 +17,34 @@ export default function App() {
     return map
   }, [gameState])
 
+  const huntersByCell = useMemo(() => {
+    const map = new Map<string, GameState["hunters"]>()
+    if (!gameState) return map
+
+    for (const h of gameState.hunters) {
+      const key = cellKey(h.cell)
+      const existing = map.get(key) ?? []
+      map.set(key, [...existing, h])
+    }
+    return map
+  }, [gameState])
+
+  const presencesByCell = useMemo(() => {
+    const map = new Map<string, GameState["presences"]>()
+    if (!gameState) return map
+
+    for (const p of gameState.presences) {
+      const key = cellKey(p.cell)
+      const existing = map.get(key) ?? []
+      map.set(key, [...existing, p])
+    }
+    return map
+  }, [gameState])
+
   const containerStyle: React.CSSProperties = {
     padding: "1rem",
     fontFamily: "system-ui, sans-serif",
-    maxWidth: 1000,
+    maxWidth: 1100,
     margin: "0 auto",
   }
 
@@ -58,6 +86,42 @@ export default function App() {
     background: "#f9fafb",
   })
 
+  const cellSize = 88
+
+  const gridStyle: React.CSSProperties = gameState
+    ? {
+        display: "grid",
+        gridTemplateColumns: `repeat(${gameState.map.width}, ${cellSize}px)`,
+        gridTemplateRows: `repeat(${gameState.map.height}, ${cellSize}px)`,
+        gap: 8,
+        marginTop: 10,
+      }
+    : {}
+
+  const gridCellBase: React.CSSProperties = {
+    border: "1px solid #e5e7eb",
+    borderRadius: 12,
+    background: "#fafafa",
+    padding: 8,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    overflow: "hidden",
+  }
+
+  const tokenStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    border: "1px solid #e5e7eb",
+    background: "#ffffff",
+    fontSize: 12,
+    fontWeight: 600,
+  }
+
   return (
     <div style={containerStyle}>
       <header
@@ -73,13 +137,7 @@ export default function App() {
 
           <div style={{ marginTop: 6, color: "#4b5563" }}>
             {gameState ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  gap: 12,
-                }}
-              >
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
                 <span
                   style={{
                     fontSize: 12,
@@ -92,15 +150,11 @@ export default function App() {
 
                 <span
                   style={{
-                    fontFamily:
-                      "ui-monospace, SFMono-Regular, Menlo, monospace",
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                     fontWeight: 600,
                   }}
                 >
-                  {formatClock(
-                    gameState.time.hour,
-                    gameState.time.minute
-                  )}
+                  {formatClock(gameState.time.hour, gameState.time.minute)}
                 </span>
               </div>
             ) : (
@@ -116,6 +170,109 @@ export default function App() {
         </div>
       </header>
 
+      {/* Map */}
+      <section style={cardStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 16 }}>Map</h2>
+          {gameState && (
+            <div style={{ color: "#6b7280", fontSize: 12 }}>
+              {gameState.map.width} × {gameState.map.height}
+            </div>
+          )}
+        </div>
+
+        {gameState ? (
+          <>
+            <div style={gridStyle}>
+              {Array.from({ length: gameState.map.height }).map((_, y) =>
+                Array.from({ length: gameState.map.width }).map((_, x) => {
+                  const key = `${x},${y}`
+                  const cellHunters = huntersByCell.get(key) ?? []
+                  const cellPresences = presencesByCell.get(key) ?? []
+
+                  const hasHunters = cellHunters.length > 0
+                  const hasPresences = cellPresences.length > 0
+
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        ...gridCellBase,
+                        background: hasPresences ? "#fff7ed" : hasHunters ? "#eff6ff" : "#fafafa",
+                      }}
+                      aria-label={`Cell ${x},${y}`}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280" }}>
+                        <span>{x},{y}</span>
+                        <span>
+                          {hasHunters ? `H:${cellHunters.length}` : ""}
+                          {hasHunters && hasPresences ? "  " : ""}
+                          {hasPresences ? `P:${cellPresences.length}` : ""}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "center" }}>
+                        {cellHunters.map((h) => (
+                          <span key={h.id} style={tokenStyle} title={h.name}>
+                            H
+                          </span>
+                        ))}
+
+                        {cellPresences.map((p) => {
+                          const pct = percent(p.presence)
+                          return (
+                            <span
+                              key={p.monsterId}
+                              style={{ ...tokenStyle, position: "relative" }}
+                              title={`Presence ${pct}%`}
+                            >
+                              P
+                              <span
+                                style={{
+                                  position: "absolute",
+                                  bottom: -6,
+                                  right: -6,
+                                  fontSize: 10,
+                                  padding: "0 6px",
+                                  borderRadius: 999,
+                                  border: "1px solid #e5e7eb",
+                                  background: "#ffffff",
+                                  color: "#374151",
+                                  lineHeight: "16px",
+                                  height: 16,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                }}
+                              >
+                                {pct}
+                              </span>
+                            </span>
+                          )
+                        })}
+                      </div>
+
+                      <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>
+                        {hasHunters || hasPresences ? "" : "empty"}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            <div style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}>
+              Legend:{" "}
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>H</span>{" "}
+              = Hunter,{" "}
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>P</span>{" "}
+              = Presence (percent shown)
+            </div>
+          </>
+        ) : (
+          <p style={{ color: "#4b5563" }}>Waiting for map…</p>
+        )}
+      </section>
+
       {/* Hunters */}
       <section style={cardStyle}>
         <h2 style={{ margin: 0, fontSize: 16 }}>Hunters</h2>
@@ -126,6 +283,7 @@ export default function App() {
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Skill</th>
                 <th style={thStyle}>Status</th>
+                <th style={thStyle}>Cell</th>
               </tr>
             </thead>
             <tbody>
@@ -134,9 +292,10 @@ export default function App() {
                   <td style={tdStyle}>{h.name}</td>
                   <td style={tdStyle}>{h.skill}</td>
                   <td style={tdStyle}>
-                    <span style={badgeStyle(h.status)}>
-                      {h.status}
-                    </span>
+                    <span style={badgeStyle(h.status)}>{h.status}</span>
+                  </td>
+                  <td style={tdStyle}>
+                    {h.cell.x},{h.cell.y}
                   </td>
                 </tr>
               ))}
@@ -169,13 +328,7 @@ export default function App() {
                     <td style={tdStyle}>{m.type}</td>
                     <td style={tdStyle}>{m.threat}</td>
                     <td style={tdStyle}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                        }}
-                      >
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <div
                           style={{
                             height: 10,
@@ -195,12 +348,7 @@ export default function App() {
                             }}
                           />
                         </div>
-                        <span
-                          style={{
-                            fontVariantNumeric: "tabular-nums",
-                            width: 44,
-                          }}
-                        >
+                        <span style={{ fontVariantNumeric: "tabular-nums", width: 44 }}>
                           {pct}%
                         </span>
                       </div>
@@ -235,9 +383,7 @@ export default function App() {
                   <td style={tdStyle}>{ms.hunterId}</td>
                   <td style={tdStyle}>{ms.monsterId}</td>
                   <td style={tdStyle}>
-                    <span style={badgeStyle(ms.status)}>
-                      {ms.status}
-                    </span>
+                    <span style={badgeStyle(ms.status)}>{ms.status}</span>
                   </td>
                 </tr>
               ))}
@@ -248,14 +394,7 @@ export default function App() {
         )}
       </section>
 
-      <footer
-        style={{
-          marginTop: "1rem",
-          color: "#6b7280",
-          fontSize: 12,
-        }}
-      >
-      </footer>
+      <footer style={{ marginTop: "1rem", color: "#6b7280", fontSize: 12 }} />
     </div>
   )
 }

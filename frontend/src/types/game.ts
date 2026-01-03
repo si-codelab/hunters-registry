@@ -10,12 +10,12 @@ export type Monster = {
   id: string
   type: string
   threat: number
-  cell: Cell
 }
 
 export type MonsterPresence = {
   monsterId: string
   presence: number
+  cell: Cell
 }
 
 export type Mission = {
