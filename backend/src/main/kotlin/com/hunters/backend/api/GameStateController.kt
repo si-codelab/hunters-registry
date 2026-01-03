@@ -13,13 +13,9 @@ class GameStateController(
 ) {
 
     @GetMapping("/state")
-    fun getState(): GameStateResponse = GameStateResponse(
-        time = gameStateService.getTime(),
-        hunters = gameStateService.getHunters(),
-        monsters = gameStateService.getMonsters(),
-        presences = gameStateService.getPresences(),
-        missions = gameStateService.getMissions()
-    )
+    fun getState(): GameStateResponse {
+        return gameStateService.snapshot()
+    }
 
     @GetMapping("/state/stream")
     fun streamState(): SseEmitter {

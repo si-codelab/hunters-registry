@@ -18,6 +18,7 @@ class GameStateService {
     private val lock = Any()
 
     private var gameMinute: Long = 0
+    private val map = GameMap(width = 6, height = 6)
     private val hunters = mutableListOf<Hunter>()
     private val monsters = mutableListOf<Monster>()
     private val presences = mutableListOf<MonsterPresence>()
@@ -128,6 +129,7 @@ class GameStateService {
     private fun buildStateResponse(): GameStateResponse {
         return GameStateResponse(
             time = buildTimeResponse(),
+            map = map,
             hunters = hunters.toList(),
             monsters = monsters.toList(),
             presences = presences.toList(),
@@ -152,14 +154,37 @@ class GameStateService {
     private fun <T> withLock(block: () -> T): T = synchronized(lock, block)
 
     private fun seedHunters() {
-        hunters += Hunter(id = "hunter-1", name = "Edric the Grey", skill = 3, status = HunterStatus.IDLE)
-        hunters += Hunter(id = "hunter-2", name = "Mara Blackthorn", skill = 4, status = HunterStatus.IDLE)
+        hunters += Hunter(
+            id = "hunter-1",
+            name = "Edric the Grey",
+            skill = 3,
+            status = HunterStatus.IDLE,
+            cell = Cell(x = 1, y = 1)
+        )
+
+        hunters += Hunter(
+            id = "hunter-2",
+            name = "Mara Blackthorn",
+            skill = 4,
+            status = HunterStatus.IDLE,
+            cell = Cell(x = 4, y = 2)
+        )
     }
 
     private fun seedMonsters() {
-        val monster = Monster(id = "monster-1", type = MonsterType.WRAITH, threat = 3)
+        val monster = Monster(
+            id = "monster-1",
+            type = MonsterType.WRAITH,
+            threat = 3
+        )
+
         monsters += monster
-        presences += MonsterPresence(monsterId = monster.id, presence = 0.8)
+
+        presences += MonsterPresence(
+            monsterId = monster.id,
+            presence = 0.8,
+            cell = Cell(x = 2, y = 4)
+        )
     }
 
     private fun seedMissions() {
