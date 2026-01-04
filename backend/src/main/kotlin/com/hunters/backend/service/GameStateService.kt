@@ -15,7 +15,9 @@ import kotlin.math.round
 @Service
 class GameStateService {
 
-    private val SCOUT_DURATION_MINUTES = 60L
+    private val SCOUT_DURATION_MINUTES = 30L
+    private val OBSERVE_DURATION_MINUTES = 5L
+    private val CAPTURE_DURATION_MINUTES = 5L
     private val SCOUT_RADIUS = 1
 
     private val emitters = mutableSetOf<SseEmitter>()
@@ -47,8 +49,8 @@ class GameStateService {
         val stateToBroadcast = withLock {
             advanceTime(minutes)
             decayPresences(minutes)
-            removeExpiredMonsters()
             updateMissions()
+            removeExpiredMonsters()
             buildStateResponse()
         }
 
@@ -60,22 +62,31 @@ class GameStateService {
             val m = missions[i]
             if (m.status != MissionStatus.IN_PROGRESS) continue
 
-            if (m.type == MissionType.SCOUT) {
-                val elapsed = gameMinute - m.startedAtMinute
-                if (elapsed >= SCOUT_DURATION_MINUTES) {
-                    missions[i] = m.copy(status = MissionStatus.COMPLETED)
+            val elapsed = gameMinute - m.startedAtMinute
+            val duration = durationFor(m.type)
+
+            if (elapsed < duration) continue
+
+            when (m.type) {
+                MissionType.SCOUT -> {
+                    missions[i] = m.copy(status = MissionStatus.SUCCEEDED)
                     setHunterIdle(m.hunterId)
                 }
-            }
-            if (m.type == MissionType.OBSERVE || m.type == MissionType.CAPTURE) {
-                val elapsed = gameMinute - m.startedAtMinute
-                if (elapsed >= 5) {
-                    missions[i] = m.copy(status = MissionStatus.COMPLETED)
+
+                MissionType.OBSERVE -> {
+                    missions[i] = m.copy(status = MissionStatus.SUCCEEDED)
+                    setHunterIdle(m.hunterId)
+                }
+
+                MissionType.CAPTURE -> {
+                    val success = resolveCapture(m)
+                    missions[i] = m.copy(status = if (success) MissionStatus.SUCCEEDED else MissionStatus.FAILED)
                     setHunterIdle(m.hunterId)
                 }
             }
         }
     }
+
 
     private fun setHunterIdle(hunterId: String) {
         val idx = hunters.indexOfFirst { it.id == hunterId }
@@ -327,5 +338,46 @@ class GameStateService {
         // presence is the real "instance" that is revealed
         return visiblePresences().any { it.monsterId == monsterId }
     }
+
+    private fun resolveCapture(mission: Mission): Boolean {
+        val hunter = hunters.firstOrNull { it.id == mission.hunterId } ?: return false
+        val monster = monsters.firstOrNull { it.id == mission.monsterId } ?: return false
+        val presence = presences.firstOrNull { it.monsterId == mission.monsterId } ?: return false
+
+        // Base chance uses skill and threat. Presence can also influence chance.
+        // Keep this simple, tune later.
+        val base = 0.45
+        val skillBonus = 0.10 * hunter.skill
+        val threatPenalty = 0.08 * monster.threat
+        val presenceBonus = 0.20 * presence.presence
+
+        val chance = (base + skillBonus + presenceBonus - threatPenalty).coerceIn(0.10, 0.90)
+
+        val roll = kotlin.random.Random.nextDouble()
+        val success = roll < chance
+
+        if (success) {
+            // Successful capture removes presence and monster from the world
+            presences.removeIf { it.monsterId == monster.id }
+            monsters.removeIf { it.id == monster.id }
+        } else {
+            // Optional small consequence so failure matters
+            // Example: presence drops a bit (monster becomes harder to find later)
+            val idx = presences.indexOfFirst { it.monsterId == monster.id }
+            if (idx != -1) {
+                val p = presences[idx]
+                presences[idx] = p.copy(presence = round2((p.presence - 0.10).coerceAtLeast(0.0)))
+            }
+        }
+
+        return success
+    }
+
+    private fun durationFor(type: MissionType): Long = when (type) {
+        MissionType.SCOUT -> SCOUT_DURATION_MINUTES
+        MissionType.OBSERVE -> OBSERVE_DURATION_MINUTES
+        MissionType.CAPTURE -> CAPTURE_DURATION_MINUTES
+    }
+
 
 }
