@@ -26,8 +26,10 @@ export default function App() {
   const { gameState, connectionStatus } = useGameStateStream()
   const [selectedCell, setSelectedCell] = useState<Cell | null>(null)
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedHunterId, setSelectedHunterId] = useState<string | null>(null)
   const [selectedMonsterId, setSelectedMonsterId] = useState<string | null>(null)
+
 
   useEffect(() => {
     if (!gameState) return
@@ -36,6 +38,60 @@ export default function App() {
     }
   }, [gameState, selectedMonsterId])
 
+  async function startMission(payload: any) {
+    setCommandError(null)
+    setIsSubmitting(true)
+    try {
+      const res = await fetch("/api/commands/missions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        let msg = `Command failed (${res.status})`
+        try {
+          const data = await res.json()
+          if (data?.error) msg = data.error
+        } catch {
+          // ignore
+        }
+        setCommandError(msg)
+        return
+      }
+    } catch {
+      setCommandError("Network error starting mission")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  function startScout() {
+    if (!selectedHunter || !selectedCell) return
+    return startMission({
+      type: "SCOUT",
+      hunterId: selectedHunter.id,
+      targetCell: selectedCell,
+    })
+  }
+
+  function startObserve() {
+    if (!selectedHunter || !selectedMonsterId) return
+    return startMission({
+      type: "OBSERVE",
+      hunterId: selectedHunter.id,
+      monsterId: selectedMonsterId,
+    })
+  }
+
+  function startCapture() {
+    if (!selectedHunter || !selectedMonsterId) return
+    return startMission({
+      type: "CAPTURE",
+      hunterId: selectedHunter.id,
+      monsterId: selectedMonsterId,
+    })
+  }
 
   const presenceByMonsterId = useMemo(() => {
     const map = new Map<string, number>()
@@ -72,6 +128,28 @@ export default function App() {
     if (!gameState || !selectedHunterId) return null
     return gameState.hunters.find((h) => h.id === selectedHunterId) ?? null
   }, [gameState, selectedHunterId])
+
+  const selectedMonster = useMemo(() => {
+    if (!gameState || !selectedMonsterId) return null
+    return gameState.monsters.find((m) => m.id === selectedMonsterId) ?? null
+  }, [gameState, selectedMonsterId])
+
+  const activeMissionByHunterId = useMemo(() => {
+    const map = new Map<string, GameState["missions"][number]>()
+    if (!gameState) return map
+
+    for (const m of gameState.missions) {
+      if (m.status !== "IN_PROGRESS") continue
+      map.set(m.hunterId, m)
+    }
+    return map
+  }, [gameState])
+
+  const hunterIsIdle = selectedHunter?.status === "IDLE"
+
+  const canScout = !!gameState && !!selectedHunter && hunterIsIdle && !!selectedCell
+  const canObserve = !!gameState && !!selectedHunter && hunterIsIdle && !!selectedMonsterId
+  const canCapture = !!gameState && !!selectedHunter && hunterIsIdle && !!selectedMonsterId
 
   const containerStyle: React.CSSProperties = {
     padding: "1rem",
@@ -182,6 +260,17 @@ export default function App() {
     fontWeight: 600,
   }
 
+  const buttonStyle = (disabled: boolean): React.CSSProperties => ({
+    fontSize: 12,
+    padding: "6px 10px",
+    borderRadius: 8,
+    border: "1px solid #e5e7eb",
+    background: disabled ? "#f3f4f6" : "#111827",
+    color: disabled ? "#9ca3af" : "#ffffff",
+    cursor: disabled ? "not-allowed" : "pointer",
+  })
+
+
   return (
     <div style={containerStyle}>
       <header
@@ -229,6 +318,92 @@ export default function App() {
           </span>
         </div>
       </header>
+
+      {/* Command */}
+      <section style={cardStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 16 }}>Command</h2>
+          <div style={{ color: "#6b7280", fontSize: 12 }}>
+            {isSubmitting ? "Sending…" : "Ready"}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+          <div style={{ fontSize: 12, color: "#374151" }}>
+            <strong>Hunter:</strong>{" "}
+            {selectedHunter ? (
+              <>
+                {selectedHunter.name}{" "}
+                <span style={{ color: "#6b7280" }}>({selectedHunter.status})</span>
+              </>
+            ) : (
+              <span style={{ color: "#9ca3af" }}>none</span>
+            )}
+          </div>
+
+          <div style={{ fontSize: 12, color: "#374151" }}>
+            <strong>Cell:</strong>{" "}
+            {selectedCell ? (
+              <>
+                {selectedCell.x},{selectedCell.y}
+              </>
+            ) : (
+              <span style={{ color: "#9ca3af" }}>none</span>
+            )}
+          </div>
+
+          <div style={{ fontSize: 12, color: "#374151" }}>
+            <strong>Monster:</strong>{" "}
+            {selectedMonster ? (
+              <>
+                {selectedMonster.type}{" "}
+                <span style={{ color: "#6b7280" }}>(id: {selectedMonster.id})</span>
+              </>
+            ) : selectedMonsterId ? (
+              <span style={{ color: "#9ca3af" }}>not visible</span>
+            ) : (
+              <span style={{ color: "#9ca3af" }}>none</span>
+            )}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button
+            onClick={startScout}
+            disabled={!canScout || isSubmitting}
+            style={buttonStyle(!canScout || isSubmitting)}
+          >
+            Start SCOUT
+          </button>
+
+          <button
+            onClick={startObserve}
+            disabled={!canObserve || isSubmitting}
+            style={buttonStyle(!canObserve || isSubmitting)}
+          >
+            Start OBSERVE
+          </button>
+
+          <button
+            onClick={startCapture}
+            disabled={!canCapture || isSubmitting}
+            style={buttonStyle(!canCapture || isSubmitting)}
+          >
+            Start CAPTURE
+          </button>
+        </div>
+
+        {commandError && (
+          <div style={{ marginTop: 10, color: "#b91c1c", fontSize: 12 }}>
+            {commandError}
+          </div>
+        )}
+
+        <div style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}>
+          Tip: select a hunter, then a cell for SCOUT or a monster for OBSERVE/CAPTURE.
+        </div>
+      </section>
+
 
       {/* Map */}
       <section style={cardStyle}>
@@ -288,11 +463,29 @@ export default function App() {
                       </div>
 
                       <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "center" }}>
-                        {cellHunters.map((h) => (
-                          <span key={h.id} style={tokenStyle} title={h.name}>
-                            H
-                          </span>
-                        ))}
+                        {cellHunters.map((h) => {
+                          const m = activeMissionByHunterId.get(h.id)
+                          const isScouting = m?.type === "SCOUT" && m.status === "IN_PROGRESS"
+
+                          return (
+                            <span
+                              key={h.id}
+                              style={{
+                                ...tokenStyle,
+                                background: isScouting ? "#111827" : "#ffffff",
+                                color: isScouting ? "#ffffff" : "#111827",
+                                border: isScouting ? "1px solid #111827" : "1px solid #e5e7eb",
+                              }}
+                              title={
+                                isScouting
+                                  ? `${h.name} (SCOUT IN_PROGRESS)`
+                                  : `${h.name} (${h.status})`
+                              }
+                            >
+                              {isScouting ? "S" : "I"}
+                            </span>
+                          )
+                        })}
 
                         {cellPresences.map((p) => {
                           const pct = percent(p.presence)
@@ -338,10 +531,12 @@ export default function App() {
 
             <div style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}>
               Legend:{" "}
-              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>H</span>{" "}
-              = Hunter,{" "}
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>I</span>{" "}
+              = Idle hunter,{" "}
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>S</span>{" "}
+              = Scouting hunter,{" "}
               <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>P</span>{" "}
-              = Presence (percent shown)
+              = Monster presence
             </div>
           </>
         ) : (
