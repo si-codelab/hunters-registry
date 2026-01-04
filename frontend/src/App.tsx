@@ -1,7 +1,10 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useGameStateStream } from "./hooks/useGameState"
 import { percent, formatClock } from "./lib/format"
 import type { Cell, GameState } from "./types/game"
+
+
+
 
 function cellKey(cell: Cell) {
   return `${cell.x},${cell.y}`
@@ -21,6 +24,8 @@ async function startScout(hunterId: string, cell: { x: number; y: number }) {
 
 export default function App() {
   const { gameState, connectionStatus } = useGameStateStream()
+  const [selectedCell, setSelectedCell] = useState<Cell | null>(null)
+  const [commandError, setCommandError] = useState<string | null>(null)
 
   const presenceByMonsterId = useMemo(() => {
     const map = new Map<string, number>()
@@ -121,6 +126,20 @@ export default function App() {
     overflow: "hidden",
   }
 
+  const clickableCell: React.CSSProperties = {
+    cursor: "pointer",
+  }
+
+  const selectedOutline: React.CSSProperties = {
+    border: "2px solid #111827",
+    background: "#ffffff",
+  }
+
+  function isSameCell(a: Cell | null, x: number, y: number) {
+    return !!a && a.x === x && a.y === y
+  }
+
+
   const tokenStyle: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
@@ -187,9 +206,17 @@ export default function App() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
           <h2 style={{ margin: 0, fontSize: 16 }}>Map</h2>
           {gameState && (
-            <div style={{ color: "#6b7280", fontSize: 12 }}>
-              {gameState.map.width} × {gameState.map.height}
+            <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+              {selectedCell && (
+                <div style={{ color: "#6b7280", fontSize: 12 }}>
+                  Selected: {selectedCell.x},{selectedCell.y}
+                </div>
+              )}
+              <div style={{ color: "#6b7280", fontSize: 12 }}>
+                {gameState.map.width} × {gameState.map.height}
+              </div>
             </div>
+
           )}
         </div>
 
@@ -208,11 +235,19 @@ export default function App() {
                   return (
                     <div
                       key={key}
+                      onClick={() => {
+                        const next = isSameCell(selectedCell, x, y) ? null : { x, y }
+                        setSelectedCell(next)
+                        setCommandError(null)
+                      }}
                       style={{
                         ...gridCellBase,
+                        ...clickableCell,
+                        ...(isSameCell(selectedCell, x, y) ? selectedOutline : {}),
                         background: hasPresences ? "#fff7ed" : hasHunters ? "#eff6ff" : "#fafafa",
                       }}
                       aria-label={`Cell ${x},${y}`}
+                      title={`Select cell ${x},${y}`}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280" }}>
                         <span>{x},{y}</span>
