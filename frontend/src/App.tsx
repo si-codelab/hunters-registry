@@ -427,6 +427,58 @@ export default function App() {
         )}
       </section>
 
+      {/* Captured Monsters */}
+      <section style={cardStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 12,
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: 16 }}>Captured Monsters</h2>
+          {gameState && (
+            <div style={{ color: "#6b7280", fontSize: 12 }}>
+              {gameState.capturedMonsters.length} captured
+            </div>
+          )}
+        </div>
+
+        {gameState ? (
+          gameState.capturedMonsters.length > 0 ? (
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Type</th>
+                  <th style={thStyle}>Threat</th>
+                  <th style={thStyle}>Captured at</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...gameState.capturedMonsters]
+                  .slice()
+                  .reverse()
+                  .map((cm) => (
+                    <tr key={`${cm.id}-${cm.capturedAtVersion}`}>
+                      <td style={tdStyle}>{cm.type}</td>
+                      <td style={tdStyle}>{cm.threat}</td>
+                      <td style={tdStyle} title={`Version ${cm.capturedAtVersion}`}>
+                        v{cm.capturedAtVersion}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          ) : (
+            <p style={{ color: "#4b5563", marginTop: 8 }}>No captures yet.</p>
+          )
+        ) : (
+          <p style={{ color: "#4b5563" }}>Waiting for state…</p>
+        )}
+      </section>
+
+
       <footer style={{ marginTop: "1rem", color: "#6b7280", fontSize: 12 }} />
     </div>
   )

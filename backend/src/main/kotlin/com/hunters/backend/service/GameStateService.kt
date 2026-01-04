@@ -29,6 +29,7 @@ class GameStateService {
     private val monsters = mutableListOf<Monster>()
     private val presences = mutableListOf<MonsterPresence>()
     private val missions = mutableListOf<Mission>()
+    private val capturedMonsters = mutableListOf<CapturedMonster>()
 
     @PostConstruct
     fun init() {
@@ -195,17 +196,17 @@ class GameStateService {
     }
 
     private fun buildStateResponse(): GameStateResponse {
-        val visible = visiblePresences()
-
         return GameStateResponse(
             time = buildTimeResponse(),
             map = map,
             hunters = hunters.toList(),
             monsters = monsters.toList(),
-            presences = visible,
-            missions = missions.toList()
+            presences = visiblePresences(),
+            missions = missions.toList(),
+            capturedMonsters = capturedMonsters.toList()
         )
     }
+
 
     private fun buildTimeResponse(): GameTimeResponse {
         val day = (gameMinute / 1440) + 1
@@ -344,8 +345,6 @@ class GameStateService {
         val monster = monsters.firstOrNull { it.id == mission.monsterId } ?: return false
         val presence = presences.firstOrNull { it.monsterId == mission.monsterId } ?: return false
 
-        // Base chance uses skill and threat. Presence can also influence chance.
-        // Keep this simple, tune later.
         val base = 0.45
         val skillBonus = 0.10 * hunter.skill
         val threatPenalty = 0.08 * monster.threat
@@ -357,12 +356,16 @@ class GameStateService {
         val success = roll < chance
 
         if (success) {
-            // Successful capture removes presence and monster from the world
+            capturedMonsters += CapturedMonster(
+                id = monster.id,
+                type = monster.type,
+                threat = monster.threat,
+                capturedAtVersion = gameMinute
+            )
+
             presences.removeIf { it.monsterId == monster.id }
             monsters.removeIf { it.id == monster.id }
         } else {
-            // Optional small consequence so failure matters
-            // Example: presence drops a bit (monster becomes harder to find later)
             val idx = presences.indexOfFirst { it.monsterId == monster.id }
             if (idx != -1) {
                 val p = presences[idx]

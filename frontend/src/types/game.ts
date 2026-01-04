@@ -36,6 +36,13 @@ export type GameTime = {
 export type Cell = { x: number; y: number }
 export type GameMap = { width: number; height: number }
 
+export type CapturedMonster = {
+  id: string
+  type: string
+  threat: number
+  capturedAtVersion: number
+}
+
 export type GameState = {
   time: GameTime
   map: GameMap
@@ -43,4 +50,5 @@ export type GameState = {
   monsters: Monster[]
   presences: MonsterPresence[]
   missions: Mission[]
+  capturedMonsters: CapturedMonster[]
 }

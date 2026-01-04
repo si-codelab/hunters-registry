@@ -8,5 +8,6 @@ data class GameStateResponse(
     val hunters: List<Hunter>,
     val monsters: List<Monster>,
     val presences: List<MonsterPresence>,
-    val missions: List<Mission>
+    val missions: List<Mission>,
+    val capturedMonsters: List<CapturedMonster>
 )
