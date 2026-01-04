@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useGameStateStream } from "./hooks/useGameState"
 import { percent, formatClock } from "./lib/format"
 import type { Cell, GameState } from "./types/game"
@@ -27,6 +27,14 @@ export default function App() {
   const [selectedCell, setSelectedCell] = useState<Cell | null>(null)
   const [commandError, setCommandError] = useState<string | null>(null)
   const [selectedHunterId, setSelectedHunterId] = useState<string | null>(null)
+  const [selectedMonsterId, setSelectedMonsterId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!gameState) return
+    if (selectedMonsterId && !gameState.monsters.some((m) => m.id === selectedMonsterId)) {
+      setSelectedMonsterId(null)
+    }
+  }, [gameState, selectedMonsterId])
 
 
   const presenceByMonsterId = useMemo(() => {
@@ -417,15 +425,29 @@ export default function App() {
                 <th style={thStyle}>Type</th>
                 <th style={thStyle}>Threat</th>
                 <th style={thStyle}>Presence</th>
+                <th style={thStyle}>Select</th>
               </tr>
             </thead>
+
             <tbody>
               {gameState.monsters.map((m) => {
                 const p = presenceByMonsterId.get(m.id) ?? 0
                 const pct = percent(p)
+                const isSelected = selectedMonsterId === m.id
 
                 return (
-                  <tr key={m.id}>
+                  <tr
+                    key={m.id}
+                    onClick={() => {
+                      setSelectedMonsterId((prev) => (prev === m.id ? null : m.id))
+                      setCommandError(null)
+                    }}
+                    style={{
+                      cursor: "pointer",
+                      ...(isSelected ? { background: "#f3f4f6" } : {}),
+                    }}
+                    title="Select monster"
+                  >
                     <td style={tdStyle}>{m.type}</td>
                     <td style={tdStyle}>{m.threat}</td>
                     <td style={tdStyle}>
@@ -454,10 +476,25 @@ export default function App() {
                         </span>
                       </div>
                     </td>
+                    <td style={tdStyle}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: 60,
+                          textAlign: "center",
+                          fontSize: 12,
+                          fontWeight: isSelected ? 600 : 400,
+                          color: isSelected ? "#111827" : "#9ca3af",
+                        }}
+                      >
+                        {isSelected ? "Selected" : "Click"}
+                      </span>
+                    </td>
                   </tr>
                 )
               })}
             </tbody>
+
           </table>
         ) : (
           <p style={{ color: "#4b5563" }}>No monsters yet.</p>
