@@ -4,11 +4,11 @@ import { percent, formatClock } from "./lib/format"
 import type { Cell, GameState } from "./types/game"
 
 
-
-
 function cellKey(cell: Cell) {
   return `${cell.x},${cell.y}`
 }
+
+
 
 async function startScout(hunterId: string, cell: { x: number; y: number }) {
   await fetch("/api/commands/missions", {
@@ -26,6 +26,8 @@ export default function App() {
   const { gameState, connectionStatus } = useGameStateStream()
   const [selectedCell, setSelectedCell] = useState<Cell | null>(null)
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [selectedHunterId, setSelectedHunterId] = useState<string | null>(null)
+
 
   const presenceByMonsterId = useMemo(() => {
     const map = new Map<string, number>()
@@ -57,6 +59,11 @@ export default function App() {
     }
     return map
   }, [gameState])
+
+  const selectedHunter = useMemo(() => {
+    if (!gameState || !selectedHunterId) return null
+    return gameState.hunters.find((h) => h.id === selectedHunterId) ?? null
+  }, [gameState, selectedHunterId])
 
   const containerStyle: React.CSSProperties = {
     padding: "1rem",
@@ -92,6 +99,20 @@ export default function App() {
     padding: "0.5rem",
     borderBottom: "1px solid #f3f4f6",
     verticalAlign: "middle",
+  }
+
+  const selectedRowStyle: React.CSSProperties = {
+    background: "#f3f4f6",
+  }
+
+  const clickableRowStyle: React.CSSProperties = {
+    cursor: "pointer",
+  }
+
+  const hoverHintStyle: React.CSSProperties = {
+    color: "#6b7280",
+    fontSize: 12,
+    marginTop: 6,
   }
 
   const badgeStyle = (status: string): React.CSSProperties => ({
@@ -323,6 +344,9 @@ export default function App() {
       {/* Hunters */}
       <section style={cardStyle}>
         <h2 style={{ margin: 0, fontSize: 16 }}>Hunters</h2>
+        <div style={hoverHintStyle}>
+          Click a hunter to select. Only idle hunters can start missions.
+        </div>
         {gameState ? (
           <table style={tableStyle}>
             <thead>
@@ -331,42 +355,51 @@ export default function App() {
                 <th style={thStyle}>Skill</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Cell</th>
-                <th style={thStyle}>Action</th>
+                <th style={thStyle}>Select</th>
               </tr>
             </thead>
             <tbody>
-              {gameState.hunters.map((h) => (
-                <tr key={h.id}>
-                  <td style={tdStyle}>{h.name}</td>
-                  <td style={tdStyle}>{h.skill}</td>
-                  <td style={tdStyle}>
-                    <span style={badgeStyle(h.status)}>{h.status}</span>
-                  </td>
-                  <td style={tdStyle}>
-                    {h.cell.x},{h.cell.y}
-                  </td>
-                  <td style={tdStyle}>
-                    {h.status === "IDLE" ? (
-                      <button
-                        onClick={() => startScout(h.id, h.cell)}
+              {gameState.hunters.map((h) => {
+                const isSelected = selectedHunterId === h.id
+
+                return (
+                  <tr
+                    key={h.id}
+                    onClick={() => {
+                      setSelectedHunterId((prev) => (prev === h.id ? null : h.id))
+                      setCommandError(null)
+                    }}
+                    style={{
+                      ...(isSelected ? selectedRowStyle : {}),
+                      ...clickableRowStyle,
+                    }}
+                    title="Select hunter"
+                  >
+                    <td style={tdStyle}>{h.name}</td>
+                    <td style={tdStyle}>{h.skill}</td>
+                    <td style={tdStyle}>
+                      <span style={badgeStyle(h.status)}>{h.status}</span>
+                    </td>
+                    <td style={tdStyle}>
+                      {h.cell.x},{h.cell.y}
+                    </td>
+                    <td style={tdStyle}>
+                      <span
                         style={{
+                          display: "inline-block",
+                          width: 60,
+                          textAlign: "center",
                           fontSize: 12,
-                          padding: "4px 8px",
-                          borderRadius: 6,
-                          border: "1px solid #e5e7eb",
-                          background: "#f9fafb",
-                          cursor: "pointer",
+                          fontWeight: isSelected ? 600 : 400,
+                          color: isSelected ? "#111827" : "#9ca3af",
                         }}
                       >
-                        Scout
-                      </button>
-                    ) : (
-                      <span style={{ color: "#9ca3af", fontSize: 12 }}>Busy</span>
-                    )}
-                  </td>
-
-                </tr>
-              ))}
+                        {isSelected ? "Selected" : "Click"}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         ) : (
