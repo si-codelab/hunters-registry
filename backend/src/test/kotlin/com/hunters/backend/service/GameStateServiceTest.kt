@@ -2,6 +2,8 @@ package com.hunters.backend.service
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -142,5 +144,135 @@ class GameStateServiceTest {
         assertEquals(com.hunters.backend.domain.HunterStatus.IDLE, hunter.status)
         assertEquals(com.hunters.backend.domain.HunterActivity.IDLE, hunter.activity)
         assertTrue(service.snapshot().presences.isEmpty())
+    }
+
+    @Test
+    fun `observe requires at least twenty energy`() {
+        val service = GameStateService()
+        service.init()
+
+        service.startMission(
+            com.hunters.backend.api.StartMissionRequest(
+                type = com.hunters.backend.domain.MissionType.SCOUT,
+                hunterId = "hunter-1",
+                targetCell = com.hunters.backend.domain.Cell(x = 2, y = 2)
+            )
+        )
+        service.tick(27)
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            service.startMission(
+                com.hunters.backend.api.StartMissionRequest(
+                    type = com.hunters.backend.domain.MissionType.OBSERVE,
+                    hunterId = "hunter-1",
+                    monsterId = "monster-1"
+                )
+            )
+        }
+
+        assertTrue(error.message!!.contains("enough energy"))
+    }
+
+    @Test
+    fun `capture requires at least thirty five energy`() {
+        val service = GameStateService()
+        service.init()
+
+        service.startMission(
+            com.hunters.backend.api.StartMissionRequest(
+                type = com.hunters.backend.domain.MissionType.SCOUT,
+                hunterId = "hunter-1",
+                targetCell = com.hunters.backend.domain.Cell(x = 2, y = 2)
+            )
+        )
+        service.tick(22)
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            service.startMission(
+                com.hunters.backend.api.StartMissionRequest(
+                    type = com.hunters.backend.domain.MissionType.CAPTURE,
+                    hunterId = "hunter-1",
+                    monsterId = "monster-1"
+                )
+            )
+        }
+
+        assertTrue(error.message!!.contains("enough energy"))
+    }
+
+    @Test
+    fun `observe completion subtracts ten energy`() {
+        val service = GameStateService()
+        service.init()
+
+        service.startMission(
+            com.hunters.backend.api.StartMissionRequest(
+                type = com.hunters.backend.domain.MissionType.SCOUT,
+                hunterId = "hunter-1",
+                targetCell = com.hunters.backend.domain.Cell(x = 2, y = 2)
+            )
+        )
+        service.startMission(
+            com.hunters.backend.api.StartMissionRequest(
+                type = com.hunters.backend.domain.MissionType.OBSERVE,
+                hunterId = "hunter-1",
+                monsterId = "monster-1"
+            )
+        )
+
+        service.tick(5)
+
+        val hunter = service.getHunters().first { it.id == "hunter-1" }
+        assertEquals(75, hunter.energy)
+    }
+
+    @Test
+    fun `capture completion subtracts twenty energy`() {
+        val service = GameStateService()
+        service.init()
+
+        service.startMission(
+            com.hunters.backend.api.StartMissionRequest(
+                type = com.hunters.backend.domain.MissionType.SCOUT,
+                hunterId = "hunter-1",
+                targetCell = com.hunters.backend.domain.Cell(x = 2, y = 2)
+            )
+        )
+        service.startMission(
+            com.hunters.backend.api.StartMissionRequest(
+                type = com.hunters.backend.domain.MissionType.CAPTURE,
+                hunterId = "hunter-1",
+                monsterId = "monster-1"
+            )
+        )
+
+        service.tick(5)
+
+        val hunter = service.getHunters().first { it.id == "hunter-1" }
+        assertEquals(65, hunter.energy)
+    }
+
+    @Test
+    fun `capture chance increases with hunter energy`() {
+        val service = GameStateService()
+        service.init()
+
+        val monster = service.getMonsters().first()
+        val presence = service.getPresences().first()
+        val lowEnergyHunter = com.hunters.backend.domain.Hunter(
+            id = "low",
+            name = "Low",
+            skill = 3,
+            energy = 35,
+            status = com.hunters.backend.domain.HunterStatus.IDLE,
+            activity = com.hunters.backend.domain.HunterActivity.IDLE,
+            cell = com.hunters.backend.domain.Cell(0, 0)
+        )
+        val highEnergyHunter = lowEnergyHunter.copy(id = "high", energy = 100)
+
+        val lowChance = service.calculateCaptureChance(lowEnergyHunter, monster, presence)
+        val highChance = service.calculateCaptureChance(highEnergyHunter, monster, presence)
+
+        assertTrue(highChance > lowChance)
     }
 }

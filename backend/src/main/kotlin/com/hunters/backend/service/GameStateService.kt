@@ -22,6 +22,10 @@ class GameStateService {
     private val MAX_HUNTER_ENERGY = 100
     private val IDLE_ENERGY_RECOVERY_PER_MINUTE = 2
     private val MISSION_ENERGY_DRAIN_PER_MINUTE = 3
+    private val OBSERVE_MINIMUM_ENERGY = 20
+    private val CAPTURE_MINIMUM_ENERGY = 35
+    private val OBSERVE_COMPLETION_ENERGY_COST = 10
+    private val CAPTURE_COMPLETION_ENERGY_COST = 20
 
     private val emitters = mutableSetOf<SseEmitter>()
     private val lock = Any()
@@ -80,12 +84,14 @@ class GameStateService {
 
                 MissionType.OBSERVE -> {
                     missions[i] = m.copy(status = MissionStatus.SUCCEEDED)
+                    applyCompletionEnergyCost(m.hunterId, OBSERVE_COMPLETION_ENERGY_COST)
                     setHunterIdle(m.hunterId)
                 }
 
                 MissionType.CAPTURE -> {
                     val success = resolveCapture(m)
                     missions[i] = m.copy(status = if (success) MissionStatus.SUCCEEDED else MissionStatus.FAILED)
+                    applyCompletionEnergyCost(m.hunterId, CAPTURE_COMPLETION_ENERGY_COST)
                     setHunterIdle(m.hunterId)
                 }
             }
@@ -114,6 +120,14 @@ class GameStateService {
                 hunters[i] = hunter.copy(energy = nextEnergy)
             }
         }
+    }
+
+    private fun applyCompletionEnergyCost(hunterId: String, cost: Int) {
+        val idx = hunters.indexOfFirst { it.id == hunterId }
+        if (idx == -1) return
+
+        val hunter = hunters[idx]
+        hunters[idx] = hunter.copy(energy = (hunter.energy - cost).coerceIn(0, MAX_HUNTER_ENERGY))
     }
 
 
@@ -305,6 +319,7 @@ class GameStateService {
                     requireMonsterExists(monsterId)
                     val presence = presences.firstOrNull { it.monsterId == monsterId }
                         ?: throw IllegalStateException("Monster has no active presence: $monsterId")
+                    requireMinimumEnergy(hunter, req.type)
 
                     // Require it to currently be revealed
                     if (!isMonsterRevealed(monsterId)) {
@@ -372,6 +387,18 @@ class GameStateService {
         }
     }
 
+    private fun requireMinimumEnergy(hunter: Hunter, missionType: MissionType) {
+        val minimum = when (missionType) {
+            MissionType.OBSERVE -> OBSERVE_MINIMUM_ENERGY
+            MissionType.CAPTURE -> CAPTURE_MINIMUM_ENERGY
+            MissionType.SCOUT -> return
+        }
+
+        if (hunter.energy < minimum) {
+            throw IllegalStateException("Hunter does not have enough energy for $missionType: ${hunter.id}")
+        }
+    }
+
     private fun isMonsterRevealed(monsterId: String): Boolean {
         // presence is the real "instance" that is revealed
         return visiblePresences().any { it.monsterId == monsterId }
@@ -382,12 +409,7 @@ class GameStateService {
         val monster = monsters.firstOrNull { it.id == mission.monsterId } ?: return false
         val presence = presences.firstOrNull { it.monsterId == mission.monsterId } ?: return false
 
-        val base = 0.45
-        val skillBonus = 0.10 * hunter.skill
-        val threatPenalty = 0.08 * monster.threat
-        val presenceBonus = 0.20 * presence.presence
-
-        val chance = (base + skillBonus + presenceBonus - threatPenalty).coerceIn(0.10, 0.90)
+        val chance = calculateCaptureChance(hunter, monster, presence)
 
         val roll = kotlin.random.Random.nextDouble()
         val success = roll < chance
@@ -411,6 +433,17 @@ class GameStateService {
         }
 
         return success
+    }
+
+    internal fun calculateCaptureChance(hunter: Hunter, monster: Monster, presence: MonsterPresence): Double {
+        val base = 0.45
+        val skillBonus = 0.10 * hunter.skill
+        val threatPenalty = 0.08 * monster.threat
+        val presenceBonus = 0.20 * presence.presence
+        val rawChance = base + skillBonus + presenceBonus - threatPenalty
+        val energyMultiplier = 0.75 + (hunter.energy / 100.0) * 0.5
+
+        return (rawChance * energyMultiplier).coerceIn(0.10, 0.90)
     }
 
     private fun durationFor(type: MissionType): Long = when (type) {
