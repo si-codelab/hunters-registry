@@ -97,16 +97,17 @@ class GameStateService {
         val idx = hunters.indexOfFirst { it.id == hunterId }
         if (idx == -1) return
         val h = hunters[idx]
-        hunters[idx] = h.copy(status = HunterStatus.IDLE)
+        hunters[idx] = h.copy(status = HunterStatus.IDLE, activity = HunterActivity.IDLE)
     }
 
     private fun updateHunterEnergy(minutes: Long) {
         for (i in hunters.indices) {
             val hunter = hunters[i]
-            val nextEnergy = when (hunter.status) {
-                HunterStatus.IDLE -> hunter.energy + (IDLE_ENERGY_RECOVERY_PER_MINUTE * minutes).toInt()
-                HunterStatus.ON_MISSION -> hunter.energy - (MISSION_ENERGY_DRAIN_PER_MINUTE * minutes).toInt()
-                HunterStatus.INCAPACITATED -> hunter.energy
+            val nextEnergy = when {
+                hunter.status == HunterStatus.ON_MISSION || hunter.activity == HunterActivity.SCOUTING ->
+                    hunter.energy - (MISSION_ENERGY_DRAIN_PER_MINUTE * minutes).toInt()
+                hunter.status == HunterStatus.IDLE -> hunter.energy + (IDLE_ENERGY_RECOVERY_PER_MINUTE * minutes).toInt()
+                else -> hunter.energy
             }.coerceIn(0, MAX_HUNTER_ENERGY)
 
             if (nextEnergy != hunter.energy) {
@@ -123,13 +124,7 @@ class GameStateService {
     }
 
     private fun visiblePresences(): List<MonsterPresence> {
-        val huntersById = hunters.associateBy { it.id }
-
-        val scoutHunters = missions
-            .asSequence()
-            .filter { it.status == MissionStatus.IN_PROGRESS && it.type == MissionType.SCOUT }
-            .mapNotNull { huntersById[it.hunterId] }
-            .toList()
+        val scoutHunters = hunters.filter { it.activity == HunterActivity.SCOUTING }
 
         if (scoutHunters.isEmpty()) return emptyList()
 
@@ -250,6 +245,7 @@ class GameStateService {
             skill = 3,
             energy = MAX_HUNTER_ENERGY,
             status = HunterStatus.IDLE,
+            activity = HunterActivity.IDLE,
             cell = Cell(x = 1, y = 1)
         )
 
@@ -259,6 +255,7 @@ class GameStateService {
             skill = 4,
             energy = MAX_HUNTER_ENERGY,
             status = HunterStatus.IDLE,
+            activity = HunterActivity.IDLE,
             cell = Cell(x = 4, y = 2)
         )
     }
@@ -279,18 +276,7 @@ class GameStateService {
         )
     }
 
-    private fun seedMissions() {
-        missions += Mission(
-            id = UUID.randomUUID().toString(),
-            type = MissionType.SCOUT,
-            hunterId = "hunter-1",
-            monsterId = "monster-1", // unused for SCOUT right now, but keep it for now
-            status = MissionStatus.IN_PROGRESS,
-            startedAtMinute = gameMinute
-        )
-    }
-
-    fun startMission(req: StartMissionRequest): Mission {
+    fun startMission(req: StartMissionRequest): Any {
         val (created, stateToBroadcast) = withLock {
             val hunterIndex = hunters.indexOfFirst { it.id == req.hunterId }
             if (hunterIndex == -1) throw IllegalArgumentException("Hunter not found: ${req.hunterId}")
@@ -305,42 +291,72 @@ class GameStateService {
                     val cell = req.targetCell ?: throw IllegalArgumentException("SCOUT requires targetCell")
                     requireCellInBounds(cell)
 
-                    // For now: move the hunter instantly to the target cell
-                    hunters[hunterIndex] = hunter.copy(
-                        status = HunterStatus.ON_MISSION,
+                    val scoutingHunter = hunter.copy(
+                        status = HunterStatus.IDLE,
+                        activity = HunterActivity.SCOUTING,
                         cell = cell
                     )
+                    hunters[hunterIndex] = scoutingHunter
+                    scoutingHunter to buildStateResponse()
                 }
 
                 MissionType.OBSERVE, MissionType.CAPTURE -> {
                     val monsterId = req.monsterId ?: throw IllegalArgumentException("${req.type} requires monsterId")
                     requireMonsterExists(monsterId)
+                    val presence = presences.firstOrNull { it.monsterId == monsterId }
+                        ?: throw IllegalStateException("Monster has no active presence: $monsterId")
 
                     // Require it to currently be revealed
                     if (!isMonsterRevealed(monsterId)) {
                         throw IllegalStateException("Monster is not revealed: $monsterId")
                     }
 
-                    hunters[hunterIndex] = hunter.copy(status = HunterStatus.ON_MISSION)
+                    hunters[hunterIndex] = hunter.copy(
+                        status = HunterStatus.ON_MISSION,
+                        activity = HunterActivity.IDLE,
+                        cell = presence.cell
+                    )
+
+                    val mission = Mission(
+                        id = UUID.randomUUID().toString(),
+                        type = req.type,
+                        hunterId = req.hunterId,
+                        monsterId = req.monsterId ?: "",
+                        status = MissionStatus.IN_PROGRESS,
+                        startedAtMinute = gameMinute
+                    )
+
+                    missions += mission
+
+                    mission to buildStateResponse()
                 }
             }
-
-            val mission = Mission(
-                id = UUID.randomUUID().toString(),
-                type = req.type,
-                hunterId = req.hunterId,
-                monsterId = req.monsterId ?: "",
-                status = MissionStatus.IN_PROGRESS,
-                startedAtMinute = gameMinute
-            )
-
-            missions += mission
-
-            mission to buildStateResponse()
         }
 
         broadcastState(stateToBroadcast)
         return created
+    }
+
+    fun stopScouting(hunterId: String): Hunter {
+        val (updatedHunter, stateToBroadcast) = withLock {
+            val hunterIndex = hunters.indexOfFirst { it.id == hunterId }
+            if (hunterIndex == -1) throw IllegalArgumentException("Hunter not found: $hunterId")
+
+            val hunter = hunters[hunterIndex]
+            if (hunter.activity != HunterActivity.SCOUTING) {
+                throw IllegalStateException("Hunter is not scouting: $hunterId")
+            }
+            if (hunter.status != HunterStatus.IDLE) {
+                throw IllegalStateException("Hunter is not idle: $hunterId")
+            }
+
+            val updated = hunter.copy(activity = HunterActivity.IDLE)
+            hunters[hunterIndex] = updated
+            updated to buildStateResponse()
+        }
+
+        broadcastState(stateToBroadcast)
+        return updatedHunter
     }
 
 

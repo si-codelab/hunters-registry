@@ -21,4 +21,16 @@ class CommandController(
             ResponseEntity.status(409).body(mapOf("error" to (e.message ?: "Conflict")))
         }
     }
+
+    @PostMapping("/hunters/{hunterId}/stop-scouting")
+    fun stopScouting(@PathVariable hunterId: String): ResponseEntity<Any> {
+        return try {
+            val updated = gameStateService.stopScouting(hunterId)
+            ResponseEntity.ok(updated)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "Bad request")))
+        } catch (e: IllegalStateException) {
+            ResponseEntity.status(409).body(mapOf("error" to (e.message ?: "Conflict")))
+        }
+    }
 }

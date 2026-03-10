@@ -6,5 +6,6 @@ data class Hunter(
     val skill: Int,
     val energy: Int,
     val status: HunterStatus,
+    val activity: HunterActivity,
     val cell: Cell
 )

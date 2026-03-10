@@ -4,6 +4,7 @@ export type Hunter = {
   skill: number
   energy: number
   status: string
+  activity: string
   cell: Cell
 }
 

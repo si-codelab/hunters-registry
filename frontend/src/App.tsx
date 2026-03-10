@@ -53,6 +53,33 @@ export default function App() {
     }
   }
 
+  async function stopScouting() {
+    if (!selectedHunter) return
+    setCommandError(null)
+    setIsSubmitting(true)
+    try {
+      const res = await fetch(`/api/commands/hunters/${selectedHunter.id}/stop-scouting`, {
+        method: "POST",
+      })
+
+      if (!res.ok) {
+        let msg = `Command failed (${res.status})`
+        try {
+          const data = await res.json()
+          if (data?.error) msg = data.error
+        } catch {
+          // ignore
+        }
+        setCommandError(msg)
+        return
+      }
+    } catch {
+      setCommandError("Network error stopping scouting")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   function startScout() {
     if (!selectedHunter || !selectedCell) return
     return startMission({
@@ -92,6 +119,9 @@ export default function App() {
     if (!gameState) return map
 
     for (const h of gameState.hunters) {
+      const isDeployed = h.activity === "SCOUTING" || h.status === "ON_MISSION"
+      if (!isDeployed) continue
+
       const key = cellKey(h.cell)
       const existing = map.get(key) ?? []
       map.set(key, [...existing, h])
@@ -133,6 +163,7 @@ export default function App() {
   }, [gameState])
 
   const hunterIsIdle = selectedHunter?.status === "IDLE"
+  const hunterIsScouting = selectedHunter?.activity === "SCOUTING"
 
   const canScout = !!gameState && !!selectedHunter && hunterIsIdle && !!selectedCell
   const canObserve = !!gameState && !!selectedHunter && hunterIsIdle && !!selectedMonsterId
@@ -321,7 +352,9 @@ export default function App() {
             {selectedHunter ? (
               <>
                 {selectedHunter.name}{" "}
-                <span style={{ color: "#6b7280" }}>({selectedHunter.status})</span>
+                <span style={{ color: "#6b7280" }}>
+                  ({selectedHunter.status}{selectedHunter.activity !== "IDLE" ? ` / ${selectedHunter.activity}` : ""})
+                </span>
               </>
             ) : (
               <span style={{ color: "#9ca3af" }}>none</span>
@@ -360,7 +393,15 @@ export default function App() {
             disabled={!canScout || isSubmitting}
             style={buttonStyle(!canScout || isSubmitting)}
           >
-            Start SCOUT
+            {hunterIsScouting ? "Reassign SCOUT" : "Start SCOUT"}
+          </button>
+
+          <button
+            onClick={stopScouting}
+            disabled={!hunterIsScouting || isSubmitting}
+            style={buttonStyle(!hunterIsScouting || isSubmitting)}
+          >
+            Stop SCOUT
           </button>
 
           <button
@@ -457,7 +498,14 @@ export default function App() {
                       <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "center" }}>
                         {cellHunters.map((h) => {
                           const m = activeMissionByHunterId.get(h.id)
-                          const isScouting = m?.type === "SCOUT" && m.status === "IN_PROGRESS"
+                          const isScouting = h.activity === "SCOUTING"
+                          const tokenLabel = isScouting
+                            ? "S"
+                            : m?.type === "OBSERVE"
+                              ? "O"
+                              : m?.type === "CAPTURE"
+                                ? "C"
+                                : "M"
 
                           return (
                             <span
@@ -470,11 +518,11 @@ export default function App() {
                               }}
                               title={
                                 isScouting
-                                  ? `${h.name} (SCOUT IN_PROGRESS)`
-                                  : `${h.name} (${h.status})`
+                                  ? `${h.name} (SCOUTING)`
+                                  : `${h.name} (${h.status}${m ? ` / ${m.type}` : ""})`
                               }
                             >
-                              {isScouting ? "S" : "I"}
+                              {tokenLabel}
                             </span>
                           )
                         })}
@@ -523,10 +571,14 @@ export default function App() {
 
             <div style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}>
               Legend:{" "}
-              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>I</span>{" "}
-              = Idle hunter,{" "}
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>M</span>{" "}
+              = hunter on mission,{" "}
               <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>S</span>{" "}
               = Scouting hunter,{" "}
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>O</span>{" "}
+              = Observe mission,{" "}
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>C</span>{" "}
+              = Capture mission,{" "}
               <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>P</span>{" "}
               = Monster presence
             </div>
@@ -549,6 +601,7 @@ export default function App() {
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Skill</th>
                 <th style={thStyle}>Energy</th>
+                <th style={thStyle}>Activity</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Cell</th>
                 <th style={thStyle}>Select</th>
@@ -574,6 +627,7 @@ export default function App() {
                     <td style={tdStyle}>{h.name}</td>
                     <td style={tdStyle}>{h.skill}</td>
                     <td style={tdStyle}>{h.energy}/100</td>
+                    <td style={tdStyle}>{h.activity}</td>
                     <td style={tdStyle}>
                       <span style={badgeStyle(h.status)}>{h.status}</span>
                     </td>
