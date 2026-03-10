@@ -28,4 +28,46 @@ class GameStateServiceTest {
             "Expected presence to decrease after ticking time"
         )
     }
+
+    @Test
+    fun `idle hunters recover energy and mission hunters lose energy`() {
+        val service = GameStateService()
+        service.init()
+
+        service.startMission(
+            com.hunters.backend.api.StartMissionRequest(
+                type = com.hunters.backend.domain.MissionType.SCOUT,
+                hunterId = "hunter-1",
+                targetCell = com.hunters.backend.domain.Cell(x = 2, y = 2)
+            )
+        )
+
+        service.tick(10)
+
+        val hunters = service.getHunters().associateBy { it.id }
+        assertEquals(70, hunters.getValue("hunter-1").energy)
+        assertEquals(100, hunters.getValue("hunter-2").energy)
+    }
+
+    @Test
+    fun `hunter energy is clamped between zero and one hundred`() {
+        val service = GameStateService()
+        service.init()
+
+        service.startMission(
+            com.hunters.backend.api.StartMissionRequest(
+                type = com.hunters.backend.domain.MissionType.SCOUT,
+                hunterId = "hunter-1",
+                targetCell = com.hunters.backend.domain.Cell(x = 2, y = 2)
+            )
+        )
+
+        service.tick(40)
+
+        val drainedHunter = service.getHunters().first { it.id == "hunter-1" }
+        val restedHunter = service.getHunters().first { it.id == "hunter-2" }
+
+        assertEquals(0, drainedHunter.energy)
+        assertEquals(100, restedHunter.energy)
+    }
 }

@@ -2,6 +2,7 @@ export type Hunter = {
   id: string
   name: string
   skill: number
+  energy: number
   status: string
   cell: Cell
 }

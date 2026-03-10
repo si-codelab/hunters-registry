@@ -19,6 +19,9 @@ class GameStateService {
     private val OBSERVE_DURATION_MINUTES = 5L
     private val CAPTURE_DURATION_MINUTES = 5L
     private val SCOUT_RADIUS = 1
+    private val MAX_HUNTER_ENERGY = 100
+    private val IDLE_ENERGY_RECOVERY_PER_MINUTE = 2
+    private val MISSION_ENERGY_DRAIN_PER_MINUTE = 3
 
     private val emitters = mutableSetOf<SseEmitter>()
     private val lock = Any()
@@ -49,6 +52,7 @@ class GameStateService {
     fun tick(minutes: Long = 1) {
         val stateToBroadcast = withLock {
             advanceTime(minutes)
+            updateHunterEnergy(minutes)
             decayPresences(minutes)
             updateMissions()
             removeExpiredMonsters()
@@ -94,6 +98,21 @@ class GameStateService {
         if (idx == -1) return
         val h = hunters[idx]
         hunters[idx] = h.copy(status = HunterStatus.IDLE)
+    }
+
+    private fun updateHunterEnergy(minutes: Long) {
+        for (i in hunters.indices) {
+            val hunter = hunters[i]
+            val nextEnergy = when (hunter.status) {
+                HunterStatus.IDLE -> hunter.energy + (IDLE_ENERGY_RECOVERY_PER_MINUTE * minutes).toInt()
+                HunterStatus.ON_MISSION -> hunter.energy - (MISSION_ENERGY_DRAIN_PER_MINUTE * minutes).toInt()
+                HunterStatus.INCAPACITATED -> hunter.energy
+            }.coerceIn(0, MAX_HUNTER_ENERGY)
+
+            if (nextEnergy != hunter.energy) {
+                hunters[i] = hunter.copy(energy = nextEnergy)
+            }
+        }
     }
 
 
@@ -229,6 +248,7 @@ class GameStateService {
             id = "hunter-1",
             name = "Edric the Grey",
             skill = 3,
+            energy = MAX_HUNTER_ENERGY,
             status = HunterStatus.IDLE,
             cell = Cell(x = 1, y = 1)
         )
@@ -237,6 +257,7 @@ class GameStateService {
             id = "hunter-2",
             name = "Mara Blackthorn",
             skill = 4,
+            energy = MAX_HUNTER_ENERGY,
             status = HunterStatus.IDLE,
             cell = Cell(x = 4, y = 2)
         )

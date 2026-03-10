@@ -9,19 +9,6 @@ function cellKey(cell: Cell) {
 }
 
 
-
-async function startScout(hunterId: string, cell: { x: number; y: number }) {
-  await fetch("/api/commands/missions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "SCOUT",
-      hunterId,
-      targetCell: cell,
-    }),
-  })
-}
-
 export default function App() {
   const { gameState, connectionStatus } = useGameStateStream()
   const [selectedCell, setSelectedCell] = useState<Cell | null>(null)
@@ -201,7 +188,7 @@ export default function App() {
     marginTop: 6,
   }
 
-  const badgeStyle = (status: string): React.CSSProperties => ({
+  const badgeStyle = (_status: string): React.CSSProperties => ({
     display: "inline-block",
     padding: "0.15rem 0.5rem",
     borderRadius: 999,
@@ -442,6 +429,11 @@ export default function App() {
                       onClick={() => {
                         const next = isSameCell(selectedCell, x, y) ? null : { x, y }
                         setSelectedCell(next)
+                        if (cellPresences.length > 0) {
+                          setSelectedMonsterId((prev) =>
+                            prev === cellPresences[0].monsterId ? null : cellPresences[0].monsterId
+                          )
+                        }
                         setCommandError(null)
                       }}
                       style={{
@@ -556,6 +548,7 @@ export default function App() {
               <tr>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Skill</th>
+                <th style={thStyle}>Energy</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Cell</th>
                 <th style={thStyle}>Select</th>
@@ -580,6 +573,7 @@ export default function App() {
                   >
                     <td style={tdStyle}>{h.name}</td>
                     <td style={tdStyle}>{h.skill}</td>
+                    <td style={tdStyle}>{h.energy}/100</td>
                     <td style={tdStyle}>
                       <span style={badgeStyle(h.status)}>{h.status}</span>
                     </td>
